@@ -23,7 +23,7 @@ Hypothesis = namedtuple('Hypothesis', ['value', 'score'])
 
 class NMT(nn.Module):
     """ Simple Neural Machine Translation Model:
-        - Bidrectional LSTM Encoder
+        - Bidirectional LSTM Encoder
         - Unidirection LSTM Decoder
         - Global Attention Model (Luong, et al. 2015)
     """
@@ -76,10 +76,14 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.Linear
         ###     Dropout Layer:
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.Dropout
-
-
-
-
+        self.encoder = nn.LSTM(embed_size, self.hidden_size, bidirectional=True)
+        self.decoder = nn.LSTMCell(embed_size + self.hidden_size, self.hidden_size)
+        self.h_projection = nn.Linear(2*self.hidden_size, self.hidden_size, bias=False)
+        self.c_projection = nn.Linear(2*self.hidden_size, self.hidden_size, bias=False)
+        self.att_projection = nn.Linear(2*self.hidden_size, self.hidden_size, bias=False)
+        self.combined_output_projection = nn.Linear(3*self.hidden_size, self.hidden_size, bias=False)
+        self.target_vocab_projection = nn.Linear(self.hidden_size, self.model_embeddings.target.weight.shape[0], bias=False)
+        self.dropout = nn.Dropout(self.dropout_rate)
         ### END YOUR CODE
 
 
@@ -168,11 +172,13 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/torch.html#torch.cat
         ###     Tensor Permute:
         ###         https://pytorch.org/docs/stable/tensors.html#torch.Tensor.permute
-
-
-
-
-
+        X = self.model_embeddings.source(source_padded)
+        output, (last_hidden, last_cell) = self.encoder(pack_padded_sequence(X, source_lengths))
+        output, _ = pad_packed_sequence(output)
+        enc_hiddens = output.permute(1, 0, 2)
+        init_decoder_hidden = self.h_projection(torch.cat((last_hidden[0], last_hidden[1]), dim=1))
+        init_decoder_cell = self.c_projection(torch.cat((last_cell[0], last_cell[1]), dim=1))
+        dec_init_state = (init_decoder_hidden, init_decoder_cell)
         ### END YOUR CODE
 
         return enc_hiddens, dec_init_state
@@ -241,12 +247,14 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/torch.html#torch.cat
         ###     Tensor Stacking:
         ###         https://pytorch.org/docs/stable/torch.html#torch.stack
-
-
-
-
-
-
+        enc_hiddens_proj = self.att_projection(enc_hiddens)
+        Y = self.model_embeddings.target(target_padded)
+        for Y_t in Y:
+            Ybar_t = torch.cat((Y_t.squeeze(), o_prev), dim=-1)
+            dec_state, o_t, e_t = self.step(Ybar_t, dec_state, enc_hiddens, enc_hiddens_proj, enc_masks)
+            combined_outputs.append(o_t)
+            o_prev = o_t
+        combined_outputs = torch.stack(combined_outputs)
         ### END YOUR CODE
 
         return combined_outputs
@@ -303,10 +311,9 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/torch.html#torch.unsqueeze
         ###     Tensor Squeeze:
         ###         https://pytorch.org/docs/stable/torch.html#torch.squeeze
-
-
-
-
+        dec_state = self.decoder(Ybar_t, dec_state)
+        dec_hidden, dec_cell = dec_state
+        e_t = enc_hiddens_proj.bmm(dec_hidden.unsqueeze(-1)).squeeze(2)
         ### END YOUR CODE
 
         # Set e_t to -inf where enc_masks has 1
@@ -340,11 +347,11 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/torch.html#torch.cat
         ###     Tanh:
         ###         https://pytorch.org/docs/stable/torch.html#torch.tanh
-
-
-
-
-
+        alpha_t = F.softmax(e_t, dim=1)
+        a_t = enc_hiddens.permute(0, 2, 1).bmm(alpha_t.unsqueeze(-1)).squeeze(2)
+        U_t = torch.cat((dec_hidden, a_t), dim=1)
+        V_t = self.combined_output_projection(U_t)
+        O_t = self.dropout(torch.tanh(V_t))
         ### END YOUR CODE
 
         combined_output = O_t
