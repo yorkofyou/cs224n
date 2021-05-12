@@ -36,7 +36,7 @@ def pad_sents(sents, pad_token):
     ### YOUR CODE HERE (~6 Lines)
     lens = [len(sentence) for sentence in sents]
     longest = max(lens)
-    for i, sentence in enumerate(sents):
+    for sentence in sents:
         padded_num = longest - len(sentence)
         if padded_num > 0:
             sentence.extend([pad_token] * padded_num)

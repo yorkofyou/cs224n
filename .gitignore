@@ -138,3 +138,12 @@ dmypy.json
 cython_debug/
 
 .DS_Store
+
+# datasets
+a2/utils/datasets/
+
+# model
+*.npy
+*.pickle
+*.bin
+*.bin.optim

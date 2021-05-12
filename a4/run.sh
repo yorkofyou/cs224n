@@ -13,3 +13,4 @@ elif [ "$1" = "vocab" ]; then
 else
 	echo "Invalid Option Selected"
 fi
+
