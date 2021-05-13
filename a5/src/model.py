@@ -22,11 +22,12 @@ class GPTConfig:
     embd_pdrop = 0.1
     resid_pdrop = 0.1
     attn_pdrop = 0.1
-    additive = False
+    synthesizer = False
 
-    def __init__(self, vocab_size, block_size, **kwargs):
+    def __init__(self, vocab_size, block_size, synthesizer, **kwargs):
         self.vocab_size = vocab_size
         self.block_size = block_size
+        self.synthesizer = synthesizer
         for k,v in kwargs.items():
             setattr(self, k, v)
 
@@ -43,8 +44,8 @@ class Block(nn.Module):
         super().__init__()
         self.ln1 = nn.LayerNorm(config.n_embd)
         self.ln2 = nn.LayerNorm(config.n_embd)
-        if config.additive:
-            self.attn = attention.AdditiveSelfAttention(config)
+        if config.synthesizer:
+            self.attn = attention.SynthesizerAttention(config)
         else:
             self.attn = attention.CausalSelfAttention(config)
         self.mlp = nn.Sequential(

@@ -168,7 +168,19 @@ class CharCorruptionDataset(Dataset):
 
     def __getitem__(self, idx):
         # TODO [part e]: see spec above
-        raise NotImplementedError
+        document = self.data[idx]
+        doc_len = len(document)
+        truncated_len = min(random.randint(4, int(self.block_size*7/8)), doc_len)
+        truncated_document = document[: truncated_len]
+        masked_len = random.randint(int(1 / 8 * truncated_len), int(3 / 8 * truncated_len))
+        assert truncated_len >= 4, (doc_len, truncated_len, masked_len, idx)
+        prefix_len = random.randint(1, truncated_len - masked_len - 1)
+        masked_string = truncated_document[: prefix_len] + self.MASK_CHAR + truncated_document[prefix_len + masked_len:] + self.MASK_CHAR + truncated_document[prefix_len: prefix_len + masked_len] + self.PAD_CHAR * (self.block_size - truncated_len - 2)
+        x = masked_string[:-1]
+        y = masked_string[1:]
+        x = torch.tensor([self.stoi[c] for c in x], dtype=torch.long)
+        y = torch.tensor([self.stoi[c] for c in y], dtype=torch.long)
+        return x, y
 
 """
 Code under here is strictly for your debugging purposes; feel free to modify
@@ -183,7 +195,7 @@ if __name__ == '__main__':
 
     if args.dataset_type == 'namedata':
         # Even if it hasn't been implemented, we use it to define the vocab
-        corruption_dataset = CharCorruptionDataset(open('wiki.txt').read(), 128) 
+        corruption_dataset = CharCorruptionDataset(open('wiki.txt', encoding='UTF-8').read(), 128)
         # Make the name dataset
         name_dataset = NameDataset(corruption_dataset,
             open('birth_places_train.tsv').read())
